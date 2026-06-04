@@ -25,14 +25,7 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(silent=True)
-
-    if data:
-        send_telegram(
-            "📈 <b>🏦 JPMorgan BotTrade 🤖</b>\n\n"
-            f"<pre>{json.dumps(data, indent=2)}</pre>"
-        )
-
+    send_telegram(request.data.decode("utf-8"))
     return "OK", 200
 
 if __name__ == "__main__":
