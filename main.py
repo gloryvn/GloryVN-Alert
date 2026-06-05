@@ -104,9 +104,17 @@ def get_order():
     # Nếu trong hàng đợi có lệnh mới chưa xử lý
     if len(order_queue) > 0:
         next_order = order_queue.pop(0)  # Lấy lệnh cũ nhất ra xử lý và xóa khỏi hàng đợi
+        
+        # --- ĐOẠN CODE TỰ ĐỘNG KHẮC PHỤC LỖI DUÔI "m" CỦA SÀN EXNESS ---
+        symbol = next_order["symbol"]
+        # Nếu tài khoản của bạn dùng đuôi m (như XAUUSDm, EURUSDm) thì tự động chèn thêm vào
+        if not symbol.endswith("m"):
+            symbol = symbol + "m"
+        # -------------------------------------------------------------
+        
         return jsonify({
             "has_order": True,
-            "symbol": next_order["symbol"],
+            "symbol": symbol,         # Sẽ trả về XAUUSDm thay vì XAUUSD
             "action": next_order["action"],
             "sl": next_order["sl"],
             "tp": next_order["tp"]
