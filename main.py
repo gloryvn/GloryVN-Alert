@@ -10,7 +10,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 # Giữ nguyên danh sách CHAT_IDS mới của bạn
 CHAT_IDS = [
     "6851056890",
-    "-1003976180576",
+    #"-1003976180576",
     "-5091908465"
 ]
 
