@@ -1,26 +1,34 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import requests
 import os
+import re
 
 app = Flask(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+# Giữ nguyên danh sách CHAT_IDS mới của bạn
 CHAT_IDS = [
     "6851056890",
     "-1003976180576",
     "-5091908465"
 ]
 
+# Khởi tạo hàng đợi trung chuyển lệnh lưu trên RAM cho MT5
+order_queue = []
+
 def send_message(chat_id, text):
-    requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text
-        },
-        timeout=10
-    )
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": text
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print(f"❌ Send message failed ({chat_id}): {e}")
 
 def send_telegram(message):
     for chat_id in CHAT_IDS:
@@ -29,11 +37,42 @@ def send_telegram(message):
         except Exception as e:
             print(f"Send failed ({chat_id}): {e}")
 
+def parse_signal_text(text):
+    """
+    Hàm Regex bóc tách chính xác cấu trúc text từ file chiến lược GloryVN.txt
+    """
+    try:
+        # 1. Tìm hướng lệnh BUY/SELL và mã sản phẩm (Ví dụ: 🟢 BUY GBPUSD hoặc 🔴 SELL EURUSD)
+        action_match = re.search(r'(BUY|SELL)\s+([A-Z0-9_\.]+)', text, re.IGNORECASE)
+        
+        # 2. Tìm các mức giá dựa theo ký tự đặc trưng 📍 Entry, 🛑 SL, và mục tiêu TP1
+        entry_match = re.search(r'📍\s*Entry:\s*([0-9\.]+)', text)
+        sl_match = re.search(r'🛑\s*SL:\s*([0-9\.]+)', text)
+        tp1_match = re.search(r'TP1:\s*([0-9\.]+)', text)
+        
+        if action_match:
+            action = action_match.group(1).lower()  # "buy" hoặc "sell"
+            symbol = action_match.group(2).upper()  # Ví dụ: "GBPUSD"
+            entry = float(entry_match.group(1)) if entry_match else 0.0
+            sl = float(sl_match.group(1)) if sl_match else 0.0
+            tp = float(tp1_match.group(1)) if tp1_match else 0.0
+            
+            return {
+                "symbol": symbol,
+                "action": action,
+                "entry": entry,
+                "sl": sl,
+                "tp": tp
+            }
+    except Exception as e:
+        print(f"⚠️ Lỗi bóc tách chuỗi văn bản tín hiệu: {e}")
+    return None
+
 @app.route("/")
 def home():
-    return "Webhook Online"
+    return "Webhook & MT5 Bridge System Online"
 
-# Webhook của TradingView hoặc dịch vụ khác
+# Webhook nhận tín hiệu từ TradingView gửi sang
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -42,7 +81,16 @@ def webhook():
         if not message:
             message = "Webhook received"
 
+        # 1. Gửi tin nhắn đến toàn bộ danh sách nhóm Telegram như cũ
         send_telegram(message)
+
+        # 2. Phân tích văn bản thô để chuyển đổi thành cấu trúc JSON lưu cho MT5
+        parsed_order = parse_signal_text(message)
+        if parsed_order:
+            order_queue.append(parsed_order)
+            print(f"📥 Đã nạp lệnh mới vào hàng đợi MT5: {parsed_order}")
+        else:
+            print("ℹ️ Nhận được thông báo nhưng không chứa cấu trúc lệnh trade hợp lệ.")
 
         return "OK", 200
 
@@ -50,7 +98,24 @@ def webhook():
         print(e)
         return "ERROR", 500
 
-# Webhook Telegram
+# API End-point dành riêng cho Bot EA trên MT5 kết nối lên lấy lệnh (Polling)
+@app.route("/get-order", methods=["GET"])
+def get_order():
+    # Nếu trong hàng đợi có lệnh mới chưa xử lý
+    if len(order_queue) > 0:
+        next_order = order_queue.pop(0)  # Lấy lệnh cũ nhất ra xử lý và xóa khỏi hàng đợi
+        return jsonify({
+            "has_order": True,
+            "symbol": next_order["symbol"],
+            "action": next_order["action"],
+            "sl": next_order["sl"],
+            "tp": next_order["tp"]
+        }), 200
+        
+    # Nếu không có lệnh nào trong hàng đợi
+    return jsonify({"has_order": False}), 200
+
+# Webhook tương tác ngược từ phía Telegram của bạn
 @app.route("/telegram", methods=["POST"])
 def telegram_webhook():
     try:
@@ -66,7 +131,7 @@ def telegram_webhook():
         if text == "/start":
             send_message(
                 chat_id,
-                "✅ Bot đã kết nối thành công.\nBạn sẽ nhận được thông báo từ webhook."
+                "✅ Bot đã kết nối thành công.\nBạn sẽ nhận được thông báo từ webhook và lệnh đã sẵn sàng cấp cho MT5."
             )
 
         return "OK", 200
