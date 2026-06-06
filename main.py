@@ -81,16 +81,25 @@ def webhook():
         if not message:
             message = "Webhook received"
 
-        # 1. Gửi tin nhắn đến toàn bộ danh sách nhóm Telegram như cũ
-        send_telegram(message)
-
-        # 2. Phân tích văn bản thô để chuyển đổi thành cấu trúc JSON lưu cho MT5
-        parsed_order = parse_signal_text(message)
-        if parsed_order:
-            order_queue.append(parsed_order)
-            print(f"📥 Đã nạp lệnh mới vào hàng đợi MT5: {parsed_order}")
+        # Phân luồng: Auto Bot Signal chỉ vào queue, Telegram signal làm cả hai
+        if "Auto Bot Signal" in message:
+            parsed_order = parse_signal_text(message)
+            if parsed_order:
+                order_queue.append(parsed_order)
+                print(f"🤖 Đã nạp lệnh AUTO BOT vào hàng đợi MT5: {parsed_order}")
+            else:
+                print("ℹ️ Auto Bot signal không chứa cấu trúc lệnh hợp lệ.")
         else:
-            print("ℹ️ Nhận được thông báo nhưng không chứa cấu trúc lệnh trade hợp lệ.")
+            # 1. Gửi tin nhắn đến toàn bộ danh sách nhóm Telegram
+            send_telegram(message)
+
+            # 2. Phân tích và nạp vào hàng đợi cho MT5
+            parsed_order = parse_signal_text(message)
+            if parsed_order:
+                order_queue.append(parsed_order)
+                print(f"📥 Đã nạp lệnh mới vào hàng đợi MT5: {parsed_order}")
+            else:
+                print("ℹ️ Nhận được thông báo nhưng không chứa cấu trúc lệnh trade hợp lệ.")
 
         return "OK", 200
 
