@@ -5,13 +5,12 @@ import re
 
 app = Flask(__name__)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN","8584322410:AAFRp9mb-lzXDFuRQ679TycskX0O6NNfrrE")
 
 # Giữ nguyên danh sách CHAT_IDS mới của bạn
 CHAT_IDS = [
     "6851056890",
-    "-1003976180576",
-    "-5091908465"
+    "-1004392601315"
 ]
 
 # Khởi tạo hàng đợi trung chuyển lệnh lưu trên RAM cho MT5
